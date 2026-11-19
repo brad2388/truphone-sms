@@ -42,6 +42,12 @@
   <h1>Truphone SMS</h1>
 
   <div class="card">
+    <label>Quick commands</label>
+    <div class="chips" id="cmds"></div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
+      <input type="checkbox" id="instant" style="width:auto;margin:0"> Send immediately when tapped
+    </label>
+
     <label for="msg">Message</label>
     <textarea id="msg" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Text to send to the selected SIMs"></textarea>
 
@@ -69,6 +75,8 @@
     <input id="base" autocapitalize="off" value="https://iot.truphone.com/api/v2.0">
     <label for="iccids">SIMs (one per line: ICCID, optional label after a comma)</label>
     <textarea id="iccids" autocapitalize="off" placeholder="89440000000000000001, Site A router&#10;89440000000000000002, Site B router"></textarea>
+    <label for="cmdlist">Quick commands (one per line: Label|text, leading spaces in the text are kept)</label>
+    <textarea id="cmdlist" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="On demand tracking|  on_demand_tracking2"></textarea>
     <button class="sec" id="pull">Load SIMs from my account</button>
     <button id="save">Save</button>
     <div class="msg" id="saved"></div>
@@ -79,16 +87,46 @@
 <script>
 const $ = id => document.getElementById(id);
 const K = 'truphone-sms-v1';
-let cfg = { token:'', base:'https://iot.truphone.com/api/v2.0', sims:[], sel:[] };
+const DEFAULT_CMDS = [
+  { label:'Teltonika: Reboot',         text:'  cpureset' },
+  { label:'Teltonika: Send data now',  text:'  on_demand_tracking2' },
+  { label:'Teltonika: Connect to FOTA', text:'  web_connect' },
+  { label:'CalAmp: !R3,1,123',         text:'!R3,1,123' },
+  { label:'CalAmp: Reboot',            text:'!R3,70,0' }
+];
+let cfg = { token:'', base:'https://iot.truphone.com/api/v2.0', sims:[], sel:[], instant:false,
+            cmds: DEFAULT_CMDS.map(c => ({ ...c })) };
 
 function load() {
   try { Object.assign(cfg, JSON.parse(localStorage.getItem(K) || '{}')); } catch (e) {}
   $('token').value = cfg.token;
   $('base').value = cfg.base;
   $('iccids').value = cfg.sims.map(s => s.label ? `${s.iccid}, ${s.label}` : s.iccid).join('\n');
+  // upgrade anyone still on the first single-button default
+  if (cfg.cmds.length === 1 && cfg.cmds[0].text === '  on_demand_tracking2') {
+    cfg.cmds = DEFAULT_CMDS.map(c => ({ ...c })); persist();
+  }
+  $('cmdlist').value = cfg.cmds.map(c => `${c.label}|${c.text}`).join('\n');
+  $('instant').checked = !!cfg.instant;
   if (!cfg.token) $('settings').open = true;
   renderChips();
+  renderCmds();
 }
+
+function renderCmds() {
+  const box = $('cmds'); box.innerHTML = '';
+  cfg.cmds.forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.textContent = c.label;
+    b.onclick = () => {
+      $('msg').value = c.text;
+      if (cfg.instant) $('send').click();
+    };
+    box.appendChild(b);
+  });
+}
+$('instant').onchange = () => { cfg.instant = $('instant').checked; persist(); };
 function persist() { try { localStorage.setItem(K, JSON.stringify(cfg)); } catch (e) {} }
 
 function renderChips() {
@@ -114,7 +152,12 @@ $('save').onclick = () => {
     return i < 0 ? { iccid: l, label: '' } : { iccid: l.slice(0, i).trim(), label: l.slice(i + 1).trim() };
   }).filter(s => s.iccid);
   cfg.sel = cfg.sel.filter(x => cfg.sims.some(s => s.iccid === x));
-  persist(); renderChips();
+  // text after the first "|" is kept exactly (including leading spaces)
+  cfg.cmds = $('cmdlist').value.split('\n').filter(l => l.includes('|')).map(l => {
+    const i = l.indexOf('|');
+    return { label: l.slice(0, i).trim(), text: l.slice(i + 1) };
+  }).filter(c => c.label && c.text.trim());
+  persist(); renderChips(); renderCmds();
   $('saved').innerHTML = '<span class="ok">Saved.</span>';
 };
 
