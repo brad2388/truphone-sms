@@ -43,7 +43,7 @@
 
   <div class="card">
     <label for="msg">Message</label>
-    <textarea id="msg" placeholder="Text to send to the selected SIMs"></textarea>
+    <textarea id="msg" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Text to send to the selected SIMs"></textarea>
 
     <label>Send to</label>
     <div class="chips" id="chips"></div>
@@ -136,11 +136,11 @@ function netErr(e) {
 }
 
 $('send').onclick = async () => {
-  const text = $('msg').value.trim();
+  const text = $('msg').value; // sent exactly as typed: leading spaces matter for device commands
   const out = $('out');
   if (!cfg.token) { out.innerHTML = '<span class="bad">Add your API token in Settings.</span>'; return; }
   if (!cfg.sel.length) { out.innerHTML = '<span class="bad">Select at least one SIM.</span>'; return; }
-  if (!text) { out.innerHTML = '<span class="bad">Enter a message.</span>'; return; }
+  if (!text.trim()) { out.innerHTML = '<span class="bad">Enter a message.</span>'; return; }
   $('send').disabled = true; out.textContent = 'Sending…';
   try {
     // No Idempotency-Key header: a custom header can fail the browser's CORS preflight.
